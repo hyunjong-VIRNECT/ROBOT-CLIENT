@@ -48,7 +48,7 @@ import numpy as np
 
 import socketio
 
-socket = socketio.Client()
+socket = socketio.Client(ssl_verify=False)
 
 @socket.event
 def connect():
@@ -109,7 +109,7 @@ LOGGER = logging.getLogger()
 
 VELOCITY_BASE_SPEED = 0.5  # m/s
 VELOCITY_BASE_ANGULAR = 0.8  # rad/sec
-VELOCITY_CMD_DURATION = 0.3  # seconds
+VELOCITY_CMD_DURATION = 0.8  # seconds
 COMMAND_INPUT_RATE = 0.1
 
 def _grpc_or_log(desc, thunk):
@@ -508,8 +508,8 @@ def main():
     """Command-line interface."""
     
     # socket connection
-    socket.connect('http://localhost:3458')
-
+    # socket.connect('https://localhost:3458')
+    socket.connect('https://192.168.6.3:3458')
     # Create robot object.
     sdk = create_standard_sdk('WASDClient')
     robot = sdk.create_robot("192.168.80.3")
