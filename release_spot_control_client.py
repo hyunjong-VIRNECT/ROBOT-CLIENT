@@ -7,10 +7,6 @@
 """WASD driving of robot."""
 
 from __future__ import print_function
-from collections import OrderedDict
-import curses
-from multiprocessing import Value
-from custom_wasd import battery_state
 import logging
 import signal
 import sys
@@ -20,14 +16,30 @@ import math
 import io
 import os
 
-#add base64
+#add spot_cam_function
+import argparse
+import bosdyn.client
+from bosdyn.client.util import (add_common_arguments, setup_logging)
+from audio import AudioCommands
+from compositor import CompositorCommands
+from health import HealthCommands
+from lighting import LightingCommands
+from media_log import MediaLogCommands
+from network import NetworkCommands
+from power import PowerCommands
+from ptz import PtzCommands
+from streamquality import StreamQualityCommands
+from utils import UtilityCommands
+from version import VersionCommands
+from webrtc import WebRTCCommands
+from bosdyn.client import spot_cam
 import base64
+#add spot_cam_function
 
 from PIL import Image, ImageEnhance
 
 from bosdyn.api import geometry_pb2
 import bosdyn.api.power_pb2 as PowerServiceProto
-# import bosdyn.api.robot_command_pb2 as robot_command_pb2
 import bosdyn.api.robot_state_pb2 as robot_state_proto
 import bosdyn.api.basic_command_pb2 as basic_command_pb2
 import bosdyn.api.spot.robot_command_pb2 as spot_command_pb2
@@ -53,6 +65,7 @@ socket = socketio.Client(ssl_verify=False)
 @socket.event
 def connect():
     print('spot socket server connected')
+    socket.emit('spot_cam_init_position', get_spot_position())
 
 @socket.event
 def disconnect():
@@ -62,18 +75,19 @@ def disconnect():
 def remote_client_connect(data):
     print("connect remote")
     wasd_interface.set_remote_client_id(data)
+    socket.emit('spot_cam_init_position', get_spot_position())
 
 @socket.event
 def remote_client_disconnect(data):
     print("disconnect remote")
-    remote_client_id = "";
+    remote_client_id = ""
     wasd_interface.set_remote_client_id(remote_client_id)
     wasd_interface._call_safe_power_off()
 
 @socket.event
 def remote_client_not_yet(data):
     print("not yet")
-    remote_client_id = "";
+    remote_client_id = ""
     wasd_interface.set_remote_client_id(remote_client_id)
 
 @socket.event
@@ -105,6 +119,12 @@ def spot_control_stand():
 def spot_control_cmd(data):
     wasd_interface._call_custom_drive(data[0], data[1], data[2])
 
+@socket.event
+def spot_cam_control(data):
+    print('cam_control_receive!!')
+    ptz_interface._set_command_options(data)
+    ptz_interface._initialize_namespace(data)
+
 LOGGER = logging.getLogger()
 
 VELOCITY_BASE_SPEED = 0.5  # m/s
@@ -117,6 +137,21 @@ def _grpc_or_log(desc, thunk):
         return thunk()
     except (ResponseError, RpcError) as err:
         LOGGER.error("Failed %s: %s" % (desc, err))
+
+def get_spot_position():
+    print('get_spot_position')
+    
+    #spot ptz cam position
+    get_spot_cam_posotion = ptz_interface._set_command_options(
+                            {'command' : 'ptz', 'ptz_command' : 'get_position', 'ptz_name' : 'mech'})
+    
+    init_spot_cam_position = {}
+
+    init_spot_cam_position['pan'] = get_spot_cam_posotion.pan.value
+    init_spot_cam_position['tilt'] = get_spot_cam_posotion.tilt.value
+    init_spot_cam_position['zoom'] = get_spot_cam_posotion.zoom.value
+    
+    return init_spot_cam_position 
 
 class ExitCheck(object):
     """A class to help exiting a loop, also capturing SIGTERM to exit the loop."""
@@ -504,19 +539,87 @@ class WasdInterface(object):
         #return 'Battery: {}{}{}'.format(status, bat_bar, time_left)
         return battery_state.charge_percentage.value
 
-def main():
+class ptzInterface(object):
+    def __init__(self, robot):
+        self._robot = robot
+        self._command_dick = {}
+        self._command_options = argparse.Namespace()
+        setup_logging(False)
+
+        self._parser = argparse.ArgumentParser(prog='bosdyn.api.spot_cam', description=main.__doc__)
+        self._subparsers = self._parser.add_subparsers(title='commands', dest='command')
+        self._subparsers.required = True
+
+        self._register_all_commands(self._subparsers, self._command_dick)
+
+        setattr(self._command_options, 'username', 'admin')
+        setattr(self._command_options, 'password', 'uhkqr0sv0ko1')
+        setattr(self._command_options, 'hostname', '192.168.80.3')
+        setattr(self._command_options, 'verbose', False)
+
+
+    def _register_all_commands(self, subparsers, command_dict):
+        COMMANDS = [
+            AudioCommands,
+            CompositorCommands,
+            HealthCommands,
+            LightingCommands,
+            MediaLogCommands,
+            NetworkCommands,
+            PowerCommands,
+            PtzCommands,
+            StreamQualityCommands,
+            UtilityCommands,
+            VersionCommands,
+            WebRTCCommands
+        ]
+        
+        for register_command in COMMANDS:
+            # print(type(register_command))
+            register_command(subparsers, command_dict)
+
+    def _initialize_namespace(self, command_dict):
+
+        for key, value in command_dict.items():        
+            self._command_options.__delattr__(key)
+
+    def _call_command(self, command_dict):
+        print('_call_command_innnnnn')
+        print(self._command_options)
+        call_command = self._command_dick[self._command_options.command].run(self._robot, self._command_options)
+
+        return call_command
+
+    def _set_command_options(self, command_dict):
+
+        for key, value in command_dict.items():        
+            setattr(self._command_options, key, value)
+
+        return self._call_command(command_dict)
+
+def main(args=None):
     """Command-line interface."""
     
     # socket connection
     # socket.connect('https://localhost:3458')
     socket.connect('https://192.168.6.3:3458')
-    # Create robot object.
-    sdk = create_standard_sdk('WASDClient')
-    robot = sdk.create_robot("192.168.80.3")
+    
+    # Create WASD robot object & Interface class.
+    wasd_sdk = create_standard_sdk('WASDClient')
+    robot = wasd_sdk.create_robot("192.168.80.3")
     robot.authenticate("admin", "uhkqr0sv0ko1")
 
     global wasd_interface
     wasd_interface = WasdInterface(robot)
+
+    # Create SPOT_PTZ robot object & Interface class
+    ptz_sdk = create_standard_sdk('Spot CAM Client')
+    spot_cam.register_all_service_clients(ptz_sdk)
+    spot_cam_robot = ptz_sdk.create_robot("192.168.80.3")
+    spot_cam_robot.authenticate("admin", "uhkqr0sv0ko1")
+
+    global ptz_interface
+    ptz_interface = ptzInterface(spot_cam_robot)
 
     try:
         wasd_interface.start()
