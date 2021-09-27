@@ -721,7 +721,7 @@ class WasdInterface(object):
 class ptzInterface(object):
     def __init__(self, robot):
         self._robot = robot
-        self._command_dick = {}
+        self._command_dic = {}
         self._command_options = argparse.Namespace()
         setup_logging(False)
 
@@ -729,7 +729,7 @@ class ptzInterface(object):
         self._subparsers = self._parser.add_subparsers(title='commands', dest='command')
         self._subparsers.required = True
 
-        self._register_all_commands(self._subparsers, self._command_dick)
+        self._register_all_commands(self._subparsers, self._command_dic)
 
         setattr(self._command_options, 'username', 'admin')
         setattr(self._command_options, 'password', 'uhkqr0sv0ko1')
@@ -765,7 +765,7 @@ class ptzInterface(object):
     def _call_command(self, command_dict):
         print('_call_command_innnnnn')
         print(self._command_options)
-        call_command = self._command_dick[self._command_options.command].run(self._robot, self._command_options)
+        call_command = self._command_dic[self._command_options.command].run(self._robot, self._command_options)
 
         return call_command
 
