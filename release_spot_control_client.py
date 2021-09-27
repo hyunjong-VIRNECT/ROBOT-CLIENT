@@ -247,7 +247,7 @@ class WasdInterface(object):
         self._mission_robot.authenticate("admin", "uhkqr0sv0ko1")
         self._mission_robot.time_sync.wait_for_sync()
         
-def upload_graph_and_snapshots(self, robot, client, lease, path, disable_alternate_route_finding):
+    def upload_graph_and_snapshots(self, robot, client, lease, path, disable_alternate_route_finding):
 
         # Load the graph from disk.
         graph_filename = os.path.join(path, 'graph')
