@@ -24,20 +24,6 @@ import requests
 from bosdyn.client.command_line import (Command, Subcommands)
 from webrtc_client import WebRTCClient
 
-logging.basicConfig(level=logging.DEBUG, filename='webrtc.log', filemode='a+')
-STDERR = logging.getLogger('stderr')
-
-class InterceptStdErr:
-    _stderr = sys.stderr
-
-    def __init__(self):
-        pass
-
-    def write(self, data):
-        STDERR.error(data)
-
-sys.stderr = InterceptStdErr()
-
 class WebRTCCommands(Subcommands):
     """Commands related to the Spot CAM's WebRTC service"""
 
