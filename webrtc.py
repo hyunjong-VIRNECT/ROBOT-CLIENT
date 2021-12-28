@@ -21,8 +21,23 @@ from aiortc import (
 from aiortc.contrib.media import MediaRecorder
 import requests
 
+import cv2
+import numpy as np
 from bosdyn.client.command_line import (Command, Subcommands)
 from webrtc_client import WebRTCClient
+
+logging.basicConfig(level=logging.DEBUG, filename='webrtc.log', filemode='a+')
+STDERR = logging.getLogger('stderr')
+
+class InterceptStdErr:
+    """Intercept all exceptions and print them to StdErr without interrupting."""
+    _stderr = sys.stderr
+
+    def __init__(self):
+        pass
+
+    def write(self, data):
+        STDERR.error(data)
 
 class WebRTCCommands(Subcommands):
     """Commands related to the Spot CAM's WebRTC service"""
@@ -30,10 +45,8 @@ class WebRTCCommands(Subcommands):
     NAME = 'webrtc'
 
     def __init__(self, subparsers, command_dict):
-        super(WebRTCCommands, self).__init__(subparsers, command_dict, [
-            WebRTCSaveCommand,
-            WebRTCRecordCommand
-        ])
+        super(WebRTCCommands, self).__init__(subparsers, command_dict,
+                                             [WebRTCSaveCommand, WebRTCRecordCommand])
 
 
 class WebRTCSaveCommand(Command):
@@ -47,8 +60,7 @@ class WebRTCSaveCommand(Command):
                                   choices=['video'])
         self._parser.add_argument('--sdp-filename', default='h264.sdp',
                                   help='File being streamed from WebRTC server')
-        self._parser.add_argument('--sdp-port', default=31102,
-                                  help='SDP port of WebRTC server')
+        self._parser.add_argument('--sdp-port', default=31102, help='SDP port of WebRTC server')
         self._parser.add_argument('--cam-ssl-cert', default=None,
                                   help="Spot CAM's client cert path to check with Spot CAM server")
         self._parser.add_argument('--dst-prefix', default='h264.sdp',
@@ -57,15 +69,14 @@ class WebRTCSaveCommand(Command):
                                   help='Number of images to save. 0 to stream without saving.')
 
     def _run(self, robot, options):
+        # Suppress all exceptions and log them instead.
+        sys.stderr = InterceptStdErr()
         if not options.cam_ssl_cert:
             options.cam_ssl_cert = False
 
         shutdown_flag = threading.Event()
-        webrtc_thread = threading.Thread(
-            target=start_webrtc,
-            args=[shutdown_flag, options, process_frame],
-            daemon=True
-        )
+        webrtc_thread = threading.Thread(target=start_webrtc,
+                                         args=[shutdown_flag, options, process_frame], daemon=True)
         webrtc_thread.start()
 
         try:
@@ -77,7 +88,7 @@ class WebRTCSaveCommand(Command):
 
 
 class WebRTCRecordCommand(Command):
-    """Save webrtc stream as video"""
+    """Save webrtc stream as video or audio"""
 
     NAME = 'record'
 
@@ -96,6 +107,8 @@ class WebRTCRecordCommand(Command):
                                   help='Number of seconds to record.')
 
     def _run(self, robot, options):
+        # Suppress all exceptions and log them instead.
+        sys.stderr = InterceptStdErr()
         if not options.cam_ssl_cert:
             options.cam_ssl_cert = False
 
@@ -111,15 +124,9 @@ class WebRTCRecordCommand(Command):
 # WebRTC must be in its own thread with its own event loop.
 async def record_webrtc(options, recorder):
     config = RTCConfiguration(iceServers=[])
-    client = WebRTCClient(options.hostname,
-                          options.username,
-                          options.password,
-                          options.sdp_port,
-                          options.sdp_filename,
-                          options.cam_ssl_cert,
-                          config,
-                          media_recorder=recorder,
-                          recorder_type=options.track)
+    client = WebRTCClient(options.hostname, options.username, options.password, options.sdp_port,
+                          options.sdp_filename, options.cam_ssl_cert, config,
+                          media_recorder=recorder, recorder_type=options.track)
     await client.start()
 
     # wait for connection to be established before recording
@@ -143,17 +150,11 @@ def start_webrtc(shutdown_flag, options, process_func, recorder=None):
     asyncio.set_event_loop(loop)
 
     config = RTCConfiguration(iceServers=[])
-    client = WebRTCClient(options.hostname,
-                          options.username,
-                          options.password,
-                          options.sdp_port,
-                          options.sdp_filename,
-                          options.cam_ssl_cert,
-                          config,
+    client = WebRTCClient(options.hostname, options.username, options.password, options.sdp_port,
+                          options.sdp_filename, options.cam_ssl_cert, config,
                           media_recorder=recorder)
 
-    asyncio.gather(client.start(),
-                   process_func(client, options, shutdown_flag),
+    asyncio.gather(client.start(), process_func(client, options, shutdown_flag),
                    monitor_shutdown(shutdown_flag, client))
     loop.run_forever()
 
@@ -165,6 +166,10 @@ async def process_frame(client, options, shutdown_flag):
             frame = await client.video_frame_queue.get()
 
             if options.count == 0:
+                pil_image = frame.to_image()
+                cv_image = np.array(pil_image) 
+                cv2.imshow('display', cv_image)
+                cv2.waitKey(1)
                 continue
 
             frame.to_image().save(f'{options.dst_prefix}-{count}.jpg')
