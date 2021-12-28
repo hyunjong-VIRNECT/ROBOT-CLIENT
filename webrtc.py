@@ -26,18 +26,19 @@ import numpy as np
 from bosdyn.client.command_line import (Command, Subcommands)
 from webrtc_client import WebRTCClient
 
-logging.basicConfig(level=logging.DEBUG, filename='webrtc.log', filemode='a+')
-STDERR = logging.getLogger('stderr')
+## Commented out because all logs for the SPOT are saved to a file
+# logging.basicConfig(level=logging.DEBUG, filename='webrtc.log', filemode='a+')
+# STDERR = logging.getLogger('stderr')
 
-class InterceptStdErr:
-    """Intercept all exceptions and print them to StdErr without interrupting."""
-    _stderr = sys.stderr
+# class InterceptStdErr:
+#     """Intercept all exceptions and print them to StdErr without interrupting."""
+#     _stderr = sys.stderr
 
-    def __init__(self):
-        pass
+#     def __init__(self):
+#         pass
 
-    def write(self, data):
-        STDERR.error(data)
+#     def write(self, data):
+#         STDERR.error(data)
 
 class WebRTCCommands(Subcommands):
     """Commands related to the Spot CAM's WebRTC service"""

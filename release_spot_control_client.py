@@ -8,9 +8,22 @@
 
 from __future__ import print_function
 from collections import OrderedDict
-import curses, logging, signal, sys, time, math, io, os, urllib3, base64, socketio, json
+import curses
+import logging
+import signal
+import sys
 from threading import Thread
+import time
+import math
+import io
+import os
+from bosdyn.client import image
+import urllib3
+import base64
+import socketio
+import json
 import graph_nav_util
+
 
 #add spot_cam_function
 import argparse
@@ -80,6 +93,8 @@ socket = socketio.Client(ssl_verify=False)
 @socket.event
 def connect():
     LOGGER.info('spot socket server connected')
+    # It transmits the current pan, tilt, and zoom values ​​of 
+    # the Spotcam to the robot server so that the Spotcam can operate from the position it last moved.
     socket.emit('spot_cam_init_position', get_spot_position())
 
 ##
@@ -170,11 +185,18 @@ def replay_misson(data):
 def go_to_waypoint(data, waypoint_id):
     wasd_interface._navigate_to(data, waypoint_id)
 
+# @author : Chulhee Lee
+# @brief : All commands for spot cam operation received from robot web client
+# @param : object(spot cam command parameter)
 @socket.event
 def spot_cam_control(data):
-    ptz_interface._set_command_options(data)
-    ptz_interface._initialize_namespace(data)
+    """Processes all commands related to spot cam operation received from robot server"""
 
+    # Operate the spot cam with the data received from the robot server
+    cam_command_interface._set_command_options(data)
+
+    # Initialize the spot cam command setting after performing the robot command
+    cam_command_interface._initialize_command(data)
 VELOCITY_CMD_DURATION = 0.8  # seconds
 
 def _grpc_or_log(desc, thunk):
@@ -183,19 +205,25 @@ def _grpc_or_log(desc, thunk):
     except (ResponseError, RpcError) as err:
         LOGGER.error("Failed %s: %s" % (desc, err))
 
+# @author : Chulhee Lee
+# @brief : Operate from the current position of spot ptz cam
+# @param : None
+# @return : dict(key : 'pan', 'tilt', 'zoom' / value : float)
 def get_spot_position():
+    """Operate from the current position of spot ptz cam"""
     
-    #spot ptz cam position
-    get_spot_cam_posotion = ptz_interface._set_command_options(
+    #spot cam ptz position command
+    get_spot_cam_posotion = cam_command_interface._set_command_options(
                             {'command' : 'ptz', 'ptz_command' : 'get_position', 'ptz_name' : 'mech'})
     
+    #Stored as keys and values ​​in dict to manipulate spot cam on the web
     init_spot_cam_position = {}
 
     init_spot_cam_position['pan'] = get_spot_cam_posotion.pan.value
     init_spot_cam_position['tilt'] = get_spot_cam_posotion.tilt.value
     init_spot_cam_position['zoom'] = get_spot_cam_posotion.zoom.value
-    
-    return init_spot_cam_position 
+
+    return init_spot_cam_position
 
 ## 
 # @brief 쓰레드 상태를 업데이트 하는 함수
@@ -282,6 +310,7 @@ class ExitCheck(object):
 # @param AsyncPeriodicQuery 요청할 쿼리명과 API 클라이언트 정보
 # @return 로봇의 기본 상태 정보가 담긴 데이터
 class AsyncRobotState(AsyncPeriodicQuery):
+    """Grab robot state."""
     def __init__(self, robot_state_client):
         super(AsyncRobotState, self).__init__("robot_state", robot_state_client, LOGGER,
                                               period_sec=0.02)
@@ -943,9 +972,9 @@ class WasdInterface(object):
         estop_status = '??'
         state = self.robot_state
         if state: 
-            for estop_sta te in state.estop_states:
-                if estop_ state.type == estop_state.TYPE_SOFTWARE:
-                    estop _status = estop_state.State.Name(estop_state.state)[6:]  # s/STATE_//
+            for estop_state in state.estop_states:
+                if estop_state.type == estop_state.TYPE_SOFTWARE:
+                    estop_status = estop_state.State.Name(estop_state.state)[6:]  # s/STATE_//
                     break 
         return estop_status
 
@@ -971,26 +1000,41 @@ class WasdInterface(object):
         
         return battery_json
 
+# @author : Chulhee Lee
+# @brief : Interface class to manipulate all features of spot cam
+# @param : object ('Spot Cam Client' robot object of spot sdk)
+class SpotCamControlInterface(object):
 
-class ptzInterface(object):
     def __init__(self, robot):
+        """Interface class to manipulate all features of spot cam"""
+
+        # 'Spot Cam Client' robot object of spot sdk
         self._robot = robot
-        self._command_dic = {}
-        self._command_options = argparse.Namespace()
         setup_logging(False)
 
+        # A dict of classes for each function for spot cam operation
+        self._command_dic = {}
+
+        # Registers sub command argument required for spot cam operation
         self._parser = argparse.ArgumentParser(prog='bosdyn.api.spot_cam', description=main.__doc__)
         self._subparsers = self._parser.add_subparsers(title='commands', dest='command')
         self._subparsers.required = True
 
-        self._register_all_commands(self._subparsers, self._command_dic)
+        # Register class for each function that can operate spot cam.(with. sub command)
+        self._register_spot_cam_commands(self._subparsers, self._command_dic)
 
+        # Parsing to the command namespace for spot cam operation using the command parameter received from the Robot Server.
+        self._command_options = argparse.Namespace()
+
+        # Parsing robot information commonly required for spot cam operation commands
         setattr(self._command_options, 'username', 'admin')
         setattr(self._command_options, 'password', 'uhkqr0sv0ko1')
         setattr(self._command_options, 'hostname', '192.168.80.3')
         setattr(self._command_options, 'verbose', False)
 
-    def _register_all_commands(self, subparsers, command_dict):
+    def _register_spot_cam_commands(self, subparsers, command_dict):
+        """Register function-specific functions and subcommand arguments for manipulating the spot cam"""
+
         COMMANDS = [
             AudioCommands,
             CompositorCommands,
@@ -1007,51 +1051,66 @@ class ptzInterface(object):
         ]
         
         for register_command in COMMANDS:
-            # print(type(register_command))
             register_command(subparsers, command_dict)
 
-    def _initialize_namespace(self, command_dict):
+    def _initialize_command(self, command_dict):
+        """Initialize the command for new spot cam manipulations"""
 
-        for key, value in command_dict.items():        
+        for key, value in command_dict.items():
             self._command_options.__delattr__(key)
 
-    def _call_command(self, command_dict):
-        #print(self._command_options)
-        call_command = self._command_dic[self._command_options.command].run(self._robot, self._command_options)
+    def _spot_cam_operate(self, command_dict):
+        """Use the command to operate the spot cam."""
 
-        return call_command
+        # Perform spot cam operation command using information received from Robot Server
+        # The result of the spot cam operation is returned.
+        operated_spot_command = self._command_dic[self._command_options.command].run(self._robot, self._command_options)
 
+        # Classification of spot cam operation functions that require data transmission to Robot Server
+        # Send the name property data of the spot cam image to the Robot Server
+        if 'list_logpoints_name' in command_dict.values():
+            socket.emit('spot_cam_data_receive_uuid_list', operated_spot_command)
+        
+        # Transmits spot cam image data to Robot Server in byte array format
+        if 'retrieve' in command_dict.values():
+            retrieve_img = base64.b64encode(operated_spot_command)
+            img_str = retrieve_img.decode("utf-8")
+            socket.emit('spot_cam_data_receive_image', img_str)
+
+        return operated_spot_command
+        
     def _set_command_options(self, command_dict):
+        """The parameters received from the robot server are divided into keys and values ​​and stored in the command dictionary."""
 
         for key, value in command_dict.items():        
             setattr(self._command_options, key, value)
 
-        return self._call_command(command_dict)
+        # Activate the spot cam with the setup command.
+        return self._spot_cam_operate(command_dict)
 
 def main(args=None):
     """Command-line interface."""
-    
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    # Create SPOT_PTZ robot object
+    spot_cam_sdk = create_standard_sdk('Spot CAM Client')
+    spot_cam.register_all_service_clients(spot_cam_sdk)
+    spot_cam_robot = spot_cam_sdk.create_robot("192.168.80.3")
+    spot_cam_robot.authenticate("admin", "uhkqr0sv0ko1")
+
+    # Create SPOT CAM Control Interface class
+    global cam_command_interface
+    cam_command_interface = SpotCamControlInterface(spot_cam_robot)
+
+    # Connect to Socket
     socket.connect('https://192.168.6.3:3458')
     
-    bosdyn.client.util.setup_logging()
-
-    # Create robot object.
     wasd_sdk = create_standard_sdk('WASDClient')
     robot = wasd_sdk.create_robot("192.168.80.3")
     robot.authenticate("admin", "uhkqr0sv0ko1")
 
     global wasd_interface
     wasd_interface = WasdInterface(robot)
-
-    # Create SPOT_PTZ robot object & Interface class
-    ptz_sdk = create_standard_sdk('Spot CAM Client')
-    spot_cam.register_all_service_clients(ptz_sdk)
-    spot_cam_robot = ptz_sdk.create_robot("192.168.80.3")
-    spot_cam_robot.authenticate("admin", "uhkqr0sv0ko1")
-
-    global ptz_interface
-    ptz_interface = ptzInterface(spot_cam_robot)
 
     try:
         wasd_interface.start()
