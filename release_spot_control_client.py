@@ -947,7 +947,7 @@ class WasdInterface(object):
                 if estop_ state.type == estop_state.TYPE_SOFTWARE:
                     estop _status = estop_state.State.Name(estop_state.state)[6:]  # s/STATE_//
                     break 
-        return estop_stat us
+        return estop_status
 
     ## 
     # @brief 로봇 배터리 충전 상태를 반환하는 함수, running_state 메시지에서 battery.value 로 사용
