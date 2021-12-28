@@ -280,7 +280,7 @@ class ExitCheck(object):
 ## 
 # @brief 로봇의 기본 상태 정보를 요청하는 비동기 클래스
 # @param AsyncPeriodicQuery 요청할 쿼리명과 API 클라이언트 정보
-# @return 로봇의 기본 상태 정보가 담긴 데이터 (id,battery,position,joint,...)
+# @return 로봇의 기본 상태 정보가 담긴 데이터
 class AsyncRobotState(AsyncPeriodicQuery):
     def __init__(self, robot_state_client):
         super(AsyncRobotState, self).__init__("robot_state", robot_state_client, LOGGER,
@@ -292,7 +292,7 @@ class AsyncRobotState(AsyncPeriodicQuery):
 ## 
 # @brief GraphNav API 기능 사용시, 로봇의 localization 정보를 요청하는 비동기 클래스
 # @param AsyncPeriodicQuery 요청할 쿼리명과 API 클라이언트 정보
-# @return GraphNav API 기능 사용시 로봇에 localization 상태 데이터 (position, rotation, joint state, ...)
+# @return GraphNav API 기능 사용시 로봇에 localization 상태 데이터 (position, rotation, joint state)
 class AsyncGraphNavState(AsyncPeriodicQuery):
     """Grab graph nav state"""
 
