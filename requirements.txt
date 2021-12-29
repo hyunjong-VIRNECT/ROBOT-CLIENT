@@ -1,7 +1,13 @@
 -f ../../../prebuilt
 
-bosdyn-client ~= 2.1
-
+bosdyn-api==3.0.0
+bosdyn-choreography-client==3.0
+bosdyn-choreography-protos==3.0
+bosdyn-client==3.0.0
+bosdyn-core==3.0.0
+bosdyn-mission==3.0.0
+python-socketio==4.6.1
+urllib3==1.25.1
 Pillow==6.1.0
 numpy==1.18.5
 aiortc==0.9.28
