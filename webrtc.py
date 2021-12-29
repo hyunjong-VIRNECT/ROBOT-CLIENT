@@ -71,7 +71,8 @@ class WebRTCSaveCommand(Command):
 
     def _run(self, robot, options):
         # Suppress all exceptions and log them instead.
-        sys.stderr = InterceptStdErr()
+        # log contents file save part annotation processing
+        # sys.stderr = InterceptStdErr()
         if not options.cam_ssl_cert:
             options.cam_ssl_cert = False
 
